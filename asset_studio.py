@@ -17,9 +17,15 @@ import sys
 import threading
 from typing import Dict, List, Any, Optional
 
+from unitypy_compat import apply_unitypy_version_tolerance
+
+
+apply_unitypy_version_tolerance()
+
 # Try to import tkinterdnd2 for drag and drop support
 try:
     from tkinterdnd2 import DND_FILES, TkinterDnD
+
     HAS_DND = True
 except ImportError:
     HAS_DND = False
@@ -27,6 +33,7 @@ except ImportError:
 
 class AssetInfo:
     """Store information about a single asset"""
+
     def __init__(self, obj, container_path: str = "", source_file: str = ""):
         self.obj = obj
         self.container_path = container_path
@@ -44,28 +51,28 @@ class AssetInfo:
             data = self.obj.read()
 
             # Strategy 1: Direct name attribute
-            if hasattr(data, 'name') and data.name:
+            if hasattr(data, "name") and data.name:
                 name = data.name
-            elif hasattr(data, 'm_Name') and data.m_Name:
+            elif hasattr(data, "m_Name") and data.m_Name:
                 name = data.m_Name
 
             # Strategy 2: Type-specific name extraction
             if not name:
                 if self.obj.type == ClassIDType.Shader:
                     # Try to get shader name from parsed name
-                    if hasattr(data, 'm_ParsedForm'):
+                    if hasattr(data, "m_ParsedForm"):
                         parsed = data.m_ParsedForm
-                        if hasattr(parsed, 'm_Name') and parsed.m_Name:
+                        if hasattr(parsed, "m_Name") and parsed.m_Name:
                             name = parsed.m_Name
                     # Fallback to m_Script if available
-                    if not name and hasattr(data, 'm_Script') and data.m_Script:
+                    if not name and hasattr(data, "m_Script") and data.m_Script:
                         script = data.m_Script
                         if isinstance(script, bytes):
-                            script = script.decode('utf-8', errors='replace')
+                            script = script.decode("utf-8", errors="replace")
                         # Extract shader name from first line
-                        lines = script.split('\n')
+                        lines = script.split("\n")
                         for line in lines[:5]:
-                            if 'Shader' in line and '"' in line:
+                            if "Shader" in line and '"' in line:
                                 start = line.find('"') + 1
                                 end = line.find('"', start)
                                 if start > 0 and end > start:
@@ -74,23 +81,29 @@ class AssetInfo:
 
                 elif self.obj.type == ClassIDType.MonoBehaviour:
                     # Try script reference name
-                    if hasattr(data, 'm_Script') and data.m_Script:
+                    if hasattr(data, "m_Script") and data.m_Script:
                         script_ref = data.m_Script
-                        if hasattr(script_ref, 'read'):
+                        if hasattr(script_ref, "read"):
                             try:
                                 script_data = script_ref.read()
-                                if hasattr(script_data, 'm_Name') and script_data.m_Name:
+                                if (
+                                    hasattr(script_data, "m_Name")
+                                    and script_data.m_Name
+                                ):
                                     name = f"MonoBehaviour ({script_data.m_Name})"
                             except:
                                 pass
 
                 elif self.obj.type == ClassIDType.Material:
-                    if hasattr(data, 'm_Shader') and data.m_Shader:
+                    if hasattr(data, "m_Shader") and data.m_Shader:
                         shader_ref = data.m_Shader
-                        if hasattr(shader_ref, 'read'):
+                        if hasattr(shader_ref, "read"):
                             try:
                                 shader_data = shader_ref.read()
-                                if hasattr(shader_data, 'm_Name') and shader_data.m_Name:
+                                if (
+                                    hasattr(shader_data, "m_Name")
+                                    and shader_data.m_Name
+                                ):
                                     name = f"Material ({shader_data.m_Name})"
                             except:
                                 pass
@@ -101,7 +114,7 @@ class AssetInfo:
         # Strategy 3: Use container path if available
         if not name and self.container_path:
             # Extract filename from container path
-            path_name = self.container_path.split('/')[-1]
+            path_name = self.container_path.split("/")[-1]
             if path_name:
                 name = path_name
 
@@ -124,57 +137,65 @@ class AssetInfo:
             "Name": self.name,
             "Size": f"{self.size:,} bytes",
             "Container": self.container_path or "(none)",
-            "Source File": os.path.basename(self.source_file) if self.source_file else "(unknown)",
+            "Source File": os.path.basename(self.source_file)
+            if self.source_file
+            else "(unknown)",
         }
 
         try:
             data = self.obj.read()
             # Add type-specific details
             if self.obj.type == ClassIDType.Texture2D:
-                details["Width"] = getattr(data, 'm_Width', 'N/A')
-                details["Height"] = getattr(data, 'm_Height', 'N/A')
-                details["Format"] = getattr(data, 'm_TextureFormat', 'N/A')
+                details["Width"] = getattr(data, "m_Width", "N/A")
+                details["Height"] = getattr(data, "m_Height", "N/A")
+                details["Format"] = getattr(data, "m_TextureFormat", "N/A")
             elif self.obj.type == ClassIDType.AudioClip:
-                details["Channels"] = getattr(data, 'm_Channels', 'N/A')
-                details["Frequency"] = getattr(data, 'm_Frequency', 'N/A')
-                details["Length"] = getattr(data, 'm_Length', 'N/A')
+                details["Channels"] = getattr(data, "m_Channels", "N/A")
+                details["Frequency"] = getattr(data, "m_Frequency", "N/A")
+                details["Length"] = getattr(data, "m_Length", "N/A")
             elif self.obj.type == ClassIDType.Mesh:
-                details["Vertices"] = getattr(data, 'm_VertexCount', 'N/A')
-                details["Submeshes"] = len(getattr(data, 'm_SubMeshes', [])) if hasattr(data, 'm_SubMeshes') else 'N/A'
+                details["Vertices"] = getattr(data, "m_VertexCount", "N/A")
+                details["Submeshes"] = (
+                    len(getattr(data, "m_SubMeshes", []))
+                    if hasattr(data, "m_SubMeshes")
+                    else "N/A"
+                )
             elif self.obj.type == ClassIDType.TextAsset:
-                script = getattr(data, 'm_Script', None)
+                script = getattr(data, "m_Script", None)
                 if script:
                     if isinstance(script, bytes):
                         details["Content Length"] = f"{len(script):,} bytes"
                     else:
                         details["Content Length"] = f"{len(str(script)):,} chars"
             elif self.obj.type == ClassIDType.MonoBehaviour:
-                script_ref = getattr(data, 'm_Script', None)
-                if script_ref and hasattr(script_ref, 'read'):
+                script_ref = getattr(data, "m_Script", None)
+                if script_ref and hasattr(script_ref, "read"):
                     try:
                         script_data = script_ref.read()
-                        details["Script Class"] = getattr(script_data, 'm_Name', 'N/A')
+                        details["Script Class"] = getattr(script_data, "m_Name", "N/A")
                     except:
                         details["Script Class"] = "N/A"
             elif self.obj.type == ClassIDType.Sprite:
-                details["Rect"] = str(getattr(data, 'm_Rect', 'N/A'))
+                details["Rect"] = str(getattr(data, "m_Rect", "N/A"))
             elif self.obj.type == ClassIDType.Shader:
-                if hasattr(data, 'm_ParsedForm') and data.m_ParsedForm:
+                if hasattr(data, "m_ParsedForm") and data.m_ParsedForm:
                     parsed = data.m_ParsedForm
-                    details["Shader Name"] = getattr(parsed, 'm_Name', 'N/A')
-                    if hasattr(parsed, 'm_FallbackName') and parsed.m_FallbackName:
+                    details["Shader Name"] = getattr(parsed, "m_Name", "N/A")
+                    if hasattr(parsed, "m_FallbackName") and parsed.m_FallbackName:
                         details["Fallback"] = parsed.m_FallbackName
-                    if hasattr(parsed, 'm_CustomEditorName') and parsed.m_CustomEditorName:
+                    if (
+                        hasattr(parsed, "m_CustomEditorName")
+                        and parsed.m_CustomEditorName
+                    ):
                         details["Custom Editor"] = parsed.m_CustomEditorName
-                    if hasattr(parsed, 'm_SubShaders'):
+                    if hasattr(parsed, "m_SubShaders"):
                         details["SubShaders"] = len(parsed.m_SubShaders)
                         total_passes = sum(
-                            len(getattr(s, 'm_Passes', []))
-                            for s in parsed.m_SubShaders
+                            len(getattr(s, "m_Passes", [])) for s in parsed.m_SubShaders
                         )
                         details["Total Passes"] = total_passes
-                    if hasattr(parsed, 'm_PropInfo') and parsed.m_PropInfo:
-                        props = getattr(parsed.m_PropInfo, 'm_Props', [])
+                    if hasattr(parsed, "m_PropInfo") and parsed.m_PropInfo:
+                        props = getattr(parsed.m_PropInfo, "m_Props", [])
                         if props:
                             details["Properties"] = len(props)
 
@@ -190,10 +211,10 @@ class AssetInfo:
 
             # TextAsset
             if self.obj.type == ClassIDType.TextAsset:
-                script = getattr(data, 'm_Script', None)
+                script = getattr(data, "m_Script", None)
                 if script:
                     if isinstance(script, bytes):
-                        return script.decode('utf-8', errors='replace')
+                        return script.decode("utf-8", errors="replace")
                     return str(script)
 
             # Shader - use UnityPy's built-in export to decompile
@@ -208,24 +229,28 @@ class AssetInfo:
 
                 # Fallback: show parsed form metadata
                 content_parts = []
-                if hasattr(data, 'm_ParsedForm') and data.m_ParsedForm:
+                if hasattr(data, "m_ParsedForm") and data.m_ParsedForm:
                     parsed = data.m_ParsedForm
                     content_parts.append(f"[Shader export failed: {export_err}]\n\n")
                     content_parts.append("=== Parsed Form (metadata only) ===\n\n")
-                    if hasattr(parsed, 'm_Name'):
+                    if hasattr(parsed, "m_Name"):
                         content_parts.append(f"Name: {parsed.m_Name}\n")
-                    if hasattr(parsed, 'm_SubShaders'):
-                        content_parts.append(f"SubShaders: {len(parsed.m_SubShaders)}\n")
-                    if hasattr(parsed, 'm_PropInfo') and parsed.m_PropInfo:
-                        props = getattr(parsed.m_PropInfo, 'm_Props', [])
+                    if hasattr(parsed, "m_SubShaders"):
+                        content_parts.append(
+                            f"SubShaders: {len(parsed.m_SubShaders)}\n"
+                        )
+                    if hasattr(parsed, "m_PropInfo") and parsed.m_PropInfo:
+                        props = getattr(parsed.m_PropInfo, "m_Props", [])
                         if props:
                             content_parts.append(f"\nProperties ({len(props)}):\n")
                             for prop in props[:50]:
-                                if hasattr(prop, 'm_Name'):
-                                    prop_type = getattr(prop, 'm_Type', '?')
-                                    prop_desc = getattr(prop, 'm_Description', '')
-                                    desc_str = f' "{prop_desc}"' if prop_desc else ''
-                                    content_parts.append(f"  {prop.m_Name}{desc_str} ({prop_type})\n")
+                                if hasattr(prop, "m_Name"):
+                                    prop_type = getattr(prop, "m_Type", "?")
+                                    prop_desc = getattr(prop, "m_Description", "")
+                                    desc_str = f' "{prop_desc}"' if prop_desc else ""
+                                    content_parts.append(
+                                        f"  {prop.m_Name}{desc_str} ({prop_type})\n"
+                                    )
 
                 if content_parts:
                     return "".join(content_parts)
@@ -315,32 +340,36 @@ class PyAssetStudio:
 
         ttk.Label(search_frame, text="Filter:").pack(side=tk.LEFT)
         self.search_var = tk.StringVar()
-        self.search_var.trace('w', self._on_filter_changed)
+        self.search_var.trace("w", self._on_filter_changed)
         self.search_entry = ttk.Entry(search_frame, textvariable=self.search_var)
         self.search_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(5, 0))
 
         # Type filter
         ttk.Label(search_frame, text="Type:").pack(side=tk.LEFT, padx=(10, 0))
         self.type_filter_var = tk.StringVar(value="All")
-        self.type_filter_combo = ttk.Combobox(search_frame, textvariable=self.type_filter_var,
-                                               state="readonly", width=15)
-        self.type_filter_combo['values'] = ["All"]
+        self.type_filter_combo = ttk.Combobox(
+            search_frame, textvariable=self.type_filter_var, state="readonly", width=15
+        )
+        self.type_filter_combo["values"] = ["All"]
         self.type_filter_combo.pack(side=tk.LEFT, padx=(5, 0))
-        self.type_filter_combo.bind('<<ComboboxSelected>>', self._on_filter_changed)
+        self.type_filter_combo.bind("<<ComboboxSelected>>", self._on_filter_changed)
 
         # Tree view with columns
         tree_frame = ttk.Frame(left_frame)
         tree_frame.pack(fill=tk.BOTH, expand=True)
 
         columns = ("name", "type", "size", "path_id")
-        self.tree = ttk.Treeview(tree_frame, columns=columns, show="headings",
-                                  selectmode="extended")
+        self.tree = ttk.Treeview(
+            tree_frame, columns=columns, show="headings", selectmode="extended"
+        )
 
         # Column headings
         self.tree.heading("name", text="Name", command=lambda: self._sort_tree("name"))
         self.tree.heading("type", text="Type", command=lambda: self._sort_tree("type"))
         self.tree.heading("size", text="Size", command=lambda: self._sort_tree("size"))
-        self.tree.heading("path_id", text="Path ID", command=lambda: self._sort_tree("path_id"))
+        self.tree.heading(
+            "path_id", text="Path ID", command=lambda: self._sort_tree("path_id")
+        )
 
         # Column widths
         self.tree.column("name", width=300, minwidth=100)
@@ -364,20 +393,26 @@ class PyAssetStudio:
         right_frame = ttk.Frame(self.main_paned)
         self.main_paned.add(right_frame, weight=1)
 
-        ttk.Label(right_frame, text="Asset Details", font=('TkDefaultFont', 10, 'bold')).pack(anchor=tk.W)
+        ttk.Label(
+            right_frame, text="Asset Details", font=("TkDefaultFont", 10, "bold")
+        ).pack(anchor=tk.W)
 
         # Details text with both scrollbars
         details_frame = ttk.Frame(right_frame)
         details_frame.pack(fill=tk.BOTH, expand=True, pady=(5, 0))
 
-        self.details_text = tk.Text(details_frame, wrap=tk.NONE, state=tk.DISABLED,
-                                     font=('Consolas', 10))
-        details_vsb = ttk.Scrollbar(details_frame, orient=tk.VERTICAL,
-                                     command=self.details_text.yview)
-        details_hsb = ttk.Scrollbar(details_frame, orient=tk.HORIZONTAL,
-                                     command=self.details_text.xview)
-        self.details_text.configure(yscrollcommand=details_vsb.set,
-                                     xscrollcommand=details_hsb.set)
+        self.details_text = tk.Text(
+            details_frame, wrap=tk.NONE, state=tk.DISABLED, font=("Consolas", 10)
+        )
+        details_vsb = ttk.Scrollbar(
+            details_frame, orient=tk.VERTICAL, command=self.details_text.yview
+        )
+        details_hsb = ttk.Scrollbar(
+            details_frame, orient=tk.HORIZONTAL, command=self.details_text.xview
+        )
+        self.details_text.configure(
+            yscrollcommand=details_vsb.set, xscrollcommand=details_hsb.set
+        )
 
         # Grid layout for details text with scrollbars
         self.details_text.grid(row=0, column=0, sticky="nsew")
@@ -388,12 +423,13 @@ class PyAssetStudio:
 
         # Status bar
         self.status_var = tk.StringVar(value="Ready")
-        self.status_bar = ttk.Label(self.root, textvariable=self.status_var,
-                                     relief=tk.SUNKEN, anchor=tk.W)
+        self.status_bar = ttk.Label(
+            self.root, textvariable=self.status_var, relief=tk.SUNKEN, anchor=tk.W
+        )
         self.status_bar.pack(fill=tk.X, side=tk.BOTTOM)
 
         # Progress bar
-        self.progress = ttk.Progressbar(self.root, mode='indeterminate')
+        self.progress = ttk.Progressbar(self.root, mode="indeterminate")
 
     def _setup_menu(self):
         """Setup the menu bar"""
@@ -403,10 +439,14 @@ class PyAssetStudio:
         # File menu
         file_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label="File", menu=file_menu)
-        file_menu.add_command(label="Open File...", command=self._open_file,
-                              accelerator="Ctrl+O")
-        file_menu.add_command(label="Open Folder...", command=self._open_folder,
-                              accelerator="Ctrl+Shift+O")
+        file_menu.add_command(
+            label="Open File...", command=self._open_file, accelerator="Ctrl+O"
+        )
+        file_menu.add_command(
+            label="Open Folder...",
+            command=self._open_folder,
+            accelerator="Ctrl+Shift+O",
+        )
         file_menu.add_separator()
         file_menu.add_command(label="Clear", command=self._clear_all)
         file_menu.add_separator()
@@ -415,7 +455,9 @@ class PyAssetStudio:
         # Export menu
         export_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label="Export", menu=export_menu)
-        export_menu.add_command(label="Export Selected...", command=self._export_selected)
+        export_menu.add_command(
+            label="Export Selected...", command=self._export_selected
+        )
         export_menu.add_command(label="Export All...", command=self._export_all)
 
         # Help menu
@@ -425,18 +467,18 @@ class PyAssetStudio:
 
     def _setup_bindings(self):
         """Setup keyboard bindings"""
-        self.root.bind('<Control-o>', lambda e: self._open_file())
-        self.root.bind('<Control-O>', lambda e: self._open_folder())
-        self.root.bind('<Control-Shift-o>', lambda e: self._open_folder())
-        self.tree.bind('<<TreeviewSelect>>', self._on_tree_select)
-        self.tree.bind('<Double-1>', self._on_tree_double_click)
+        self.root.bind("<Control-o>", lambda e: self._open_file())
+        self.root.bind("<Control-O>", lambda e: self._open_folder())
+        self.root.bind("<Control-Shift-o>", lambda e: self._open_folder())
+        self.tree.bind("<<TreeviewSelect>>", self._on_tree_select)
+        self.tree.bind("<Double-1>", self._on_tree_double_click)
 
     def _setup_drag_drop(self):
         """Setup drag and drop support"""
         if HAS_DND:
             # Register for drag and drop
             self.root.drop_target_register(DND_FILES)
-            self.root.dnd_bind('<<Drop>>', self._on_drop)
+            self.root.dnd_bind("<<Drop>>", self._on_drop)
             self.status_var.set("Ready - Drag and drop files here to open")
         else:
             self.status_var.set("Ready (install tkinterdnd2 for drag & drop)")
@@ -450,17 +492,18 @@ class PyAssetStudio:
     def _parse_drop_data(self, data: str) -> List[str]:
         """Parse drag and drop data to extract file paths"""
         import re
+
         files = []
         # Handle Windows format with braces for paths with spaces
-        if '{' in data:
-            matches = re.findall(r'\{([^}]+)\}|(\S+)', data)
+        if "{" in data:
+            matches = re.findall(r"\{([^}]+)\}|(\S+)", data)
             for match in matches:
                 path = match[0] or match[1]
                 if path and os.path.exists(path):
                     files.append(path)
         else:
             # Simple space or newline separated
-            for path in data.replace('\r', '').split('\n'):
+            for path in data.replace("\r", "").split("\n"):
                 path = path.strip()
                 if path and os.path.exists(path):
                     files.append(path)
@@ -472,7 +515,7 @@ class PyAssetStudio:
             ("All supported files", "*.ab;*.bundle;*.unity3d;*.assets;*"),
             ("AssetBundle files", "*.ab;*.bundle;*.unity3d"),
             ("Assets files", "*.assets"),
-            ("All files", "*.*")
+            ("All files", "*.*"),
         ]
         filepath = filedialog.askopenfilename(filetypes=filetypes)
         if filepath:
@@ -518,6 +561,15 @@ class PyAssetStudio:
                 env = UnityPy.load(filepath)
                 self.loaded_files.append(filepath)
 
+                # Load dependencies (including .resS/.ress files)
+                try:
+                    if hasattr(env, "file") and env.file:
+                        env.file.load_dependencies()
+                except Exception as dep_err:
+                    print(
+                        f"Warning: Could not load dependencies for {filepath}: {dep_err}"
+                    )
+
                 # Build container map
                 container_map = {}
                 for container_path, obj in env.container.items():
@@ -534,8 +586,10 @@ class PyAssetStudio:
                     all_types.add(asset_info.type)
 
                     # Add to tree (in main thread)
-                    self.root.after(0, lambda aid=item_id, ai=asset_info:
-                                    self._add_tree_item(aid, ai))
+                    self.root.after(
+                        0,
+                        lambda aid=item_id, ai=asset_info: self._add_tree_item(aid, ai),
+                    )
 
             except Exception as e:
                 print(f"Error loading {filepath}: {e}")
@@ -545,29 +599,53 @@ class PyAssetStudio:
 
     def _add_tree_item(self, item_id: str, asset_info: AssetInfo):
         """Add an item to the tree view"""
-        self.tree.insert("", tk.END, iid=item_id, values=(
-            asset_info.name,
-            asset_info.type,
-            f"{asset_info.size:,}",
-            asset_info.path_id
-        ))
+        self.tree.insert(
+            "",
+            tk.END,
+            iid=item_id,
+            values=(
+                asset_info.name,
+                asset_info.type,
+                f"{asset_info.size:,}",
+                asset_info.path_id,
+            ),
+        )
 
     def _update_type_filter(self, types: List[str]):
         """Update the type filter combobox"""
-        self.type_filter_combo['values'] = types
+        self.type_filter_combo["values"] = types
 
     def _loading_complete(self):
         """Called when loading is complete"""
         self.progress.stop()
         self.progress.pack_forget()
-        self.status_var.set(f"Loaded {len(self.assets)} assets from {len(self.loaded_files)} file(s)")
+
+        # Calculate total size of all assets
+        total_size = sum(asset.size for asset in self.assets.values())
+
+        # Format size for display
+        if total_size >= 1024**3:
+            size_str = f"{total_size / (1024**3):.2f} GB"
+        elif total_size >= 1024**2:
+            size_str = f"{total_size / (1024**2):.2f} MB"
+        elif total_size >= 1024:
+            size_str = f"{total_size / 1024:.2f} KB"
+        else:
+            size_str = f"{total_size} bytes"
+
+        self.status_var.set(
+            f"Loaded {len(self.assets)} assets from {len(self.loaded_files)} file(s) | Total: {size_str} ({total_size:,} bytes)"
+        )
+
+        # Sort by size descending by default after loading
+        self._sort_tree("size", initial_sort=True)
 
     def _clear_all(self):
         """Clear all loaded data"""
         self.tree.delete(*self.tree.get_children())
         self.assets.clear()
         self.loaded_files.clear()
-        self.type_filter_combo['values'] = ["All"]
+        self.type_filter_combo["values"] = ["All"]
         self.type_filter_var.set("All")
         self.search_var.set("")
         self._clear_details()
@@ -612,7 +690,11 @@ class PyAssetStudio:
             self.details_text.insert(tk.END, "=" * 50 + "\n\n")
             # Limit content length for display
             if len(text_content) > 50000:
-                text_content = text_content[:50000] + "\n\n... [Content truncated, total {:,} chars]".format(len(text_content))
+                text_content = text_content[
+                    :50000
+                ] + "\n\n... [Content truncated, total {:,} chars]".format(
+                    len(text_content)
+                )
             self.details_text.insert(tk.END, text_content)
 
         self.details_text.config(state=tk.DISABLED)
@@ -652,32 +734,43 @@ class PyAssetStudio:
                 if show:
                     # Check if item exists, if not add it
                     if not self.tree.exists(item_id):
-                        self.tree.insert("", tk.END, iid=item_id, values=(
-                            asset_info.name,
-                            asset_info.type,
-                            f"{asset_info.size:,}",
-                            asset_info.path_id
-                        ))
+                        self.tree.insert(
+                            "",
+                            tk.END,
+                            iid=item_id,
+                            values=(
+                                asset_info.name,
+                                asset_info.type,
+                                f"{asset_info.size:,}",
+                                asset_info.path_id,
+                            ),
+                        )
                 else:
                     if self.tree.exists(item_id):
                         self.tree.delete(item_id)
             except tk.TclError:
                 pass
 
-    def _sort_tree(self, column: str):
+    def _sort_tree(self, column: str, initial_sort: bool = False):
         """Sort tree by column"""
-        items = [(self.tree.set(item, column), item) for item in self.tree.get_children()]
+        items = [
+            (self.tree.set(item, column), item) for item in self.tree.get_children()
+        ]
 
         # Determine sort order
-        reverse = False
-        if hasattr(self, '_last_sort') and self._last_sort == column:
-            reverse = not getattr(self, '_last_reverse', False)
+        if initial_sort and column == "size":
+            # For initial sort on size, default to descending
+            reverse = True
+        elif hasattr(self, "_last_sort") and self._last_sort == column:
+            reverse = not getattr(self, "_last_reverse", False)
+        else:
+            reverse = False
         self._last_sort = column
         self._last_reverse = reverse
 
         # Sort items
         if column == "size":
-            items.sort(key=lambda x: int(x[0].replace(',', '')), reverse=reverse)
+            items.sort(key=lambda x: int(x[0].replace(",", "")), reverse=reverse)
         elif column == "path_id":
             items.sort(key=lambda x: int(x[0]), reverse=reverse)
         else:
@@ -685,7 +778,7 @@ class PyAssetStudio:
 
         # Rearrange items
         for index, (_, item) in enumerate(items):
-            self.tree.move(item, '', index)
+            self.tree.move(item, "", index)
 
     def _export_selected(self):
         """Export selected assets"""
@@ -730,7 +823,7 @@ class PyAssetStudio:
 
             # Sanitize asset name: replace path separators to avoid
             # FileNotFoundError from names like "MLBBBuiltin/Legacy Shaders/VertexLit"
-            safe_name = asset_info.name.replace('/', '_').replace('\\', '_')
+            safe_name = asset_info.name.replace("/", "_").replace("\\", "_")
 
             if asset_info.obj.type == ClassIDType.Texture2D:
                 # Export as PNG
@@ -743,18 +836,18 @@ class PyAssetStudio:
                 # Export as text
                 script = data.m_Script
                 if isinstance(script, bytes):
-                    script = script.decode('utf-8', errors='replace')
+                    script = script.decode("utf-8", errors="replace")
                 filepath = os.path.join(folder, f"{safe_name}.txt")
-                with open(filepath, 'w', encoding='utf-8') as f:
+                with open(filepath, "w", encoding="utf-8") as f:
                     f.write(script)
                 return True
 
             elif asset_info.obj.type == ClassIDType.AudioClip:
                 # Export audio
                 for name, audio_data in data.samples.items():
-                    safe_audio_name = name.replace('/', '_').replace('\\', '_')
+                    safe_audio_name = name.replace("/", "_").replace("\\", "_")
                     filepath = os.path.join(folder, f"{safe_audio_name}")
-                    with open(filepath, 'wb') as f:
+                    with open(filepath, "wb") as f:
                         f.write(audio_data)
                 return True
 
@@ -771,15 +864,17 @@ class PyAssetStudio:
                 try:
                     exported = data.export()
                     if exported and exported.strip():
-                        with open(filepath, 'w', encoding='utf-8') as f:
+                        with open(filepath, "w", encoding="utf-8") as f:
                             f.write(exported)
                         return True
                 except Exception:
                     pass
                 # Fallback: export raw data
                 raw_data = asset_info.obj.get_raw_data()
-                filepath = os.path.join(folder, f"{safe_name}_{asset_info.path_id}.shader.dat")
-                with open(filepath, 'wb') as f:
+                filepath = os.path.join(
+                    folder, f"{safe_name}_{asset_info.path_id}.shader.dat"
+                )
+                with open(filepath, "wb") as f:
                     f.write(raw_data)
                 return True
 
@@ -787,23 +882,26 @@ class PyAssetStudio:
                 # Export raw data for other types
                 raw_data = asset_info.obj.get_raw_data()
                 filepath = os.path.join(folder, f"{safe_name}_{asset_info.path_id}.dat")
-                with open(filepath, 'wb') as f:
+                with open(filepath, "wb") as f:
                     f.write(raw_data)
                 return True
 
         except Exception as e:
             print(f"Error exporting {asset_info.name}: {e}")
             import traceback
+
             traceback.print_exc()
             return False
 
     def _show_about(self):
         """Show about dialog"""
-        messagebox.showinfo("About PyAssetStudio",
-                           "PyAssetStudio v1.0\n\n"
-                           "A simple AssetBundle viewer\n"
-                           "Built with UnityPy and Tkinter\n\n"
-                           "Similar to AssetStudioGUI")
+        messagebox.showinfo(
+            "About PyAssetStudio",
+            "PyAssetStudio v1.0\n\n"
+            "A simple AssetBundle viewer\n"
+            "Built with UnityPy and Tkinter\n\n"
+            "Similar to AssetStudioGUI",
+        )
 
 
 def main():
@@ -832,25 +930,25 @@ def create_file_association():
     script_path = os.path.abspath(__file__)
 
     # File types to associate
-    extensions = ['.unity3d', '.ab', '.bundle', '.assets']
+    extensions = [".unity3d", ".ab", ".bundle", ".assets"]
 
     try:
         for ext in extensions:
             # Create extension key
             key = winreg.CreateKey(winreg.HKEY_CLASSES_ROOT, ext)
-            winreg.SetValue(key, '', winreg.REG_SZ, 'PyAssetStudio')
+            winreg.SetValue(key, "", winreg.REG_SZ, "PyAssetStudio")
             winreg.CloseKey(key)
 
         # Create PyAssetStudio key
-        key = winreg.CreateKey(winreg.HKEY_CLASSES_ROOT, 'PyAssetStudio')
-        winreg.SetValue(key, '', winreg.REG_SZ, 'Unity Asset Bundle')
+        key = winreg.CreateKey(winreg.HKEY_CLASSES_ROOT, "PyAssetStudio")
+        winreg.SetValue(key, "", winreg.REG_SZ, "Unity Asset Bundle")
         winreg.CloseKey(key)
 
         # Create shell\open\command
-        key = winreg.CreateKey(winreg.HKEY_CLASSES_ROOT,
-                               r'PyAssetStudio\shell\open\command')
-        winreg.SetValue(key, '', winreg.REG_SZ,
-                       f'"{exe_path}" "{script_path}" "%1"')
+        key = winreg.CreateKey(
+            winreg.HKEY_CLASSES_ROOT, r"PyAssetStudio\shell\open\command"
+        )
+        winreg.SetValue(key, "", winreg.REG_SZ, f'"{exe_path}" "{script_path}" "%1"')
         winreg.CloseKey(key)
 
         print("File associations created successfully!")
@@ -863,7 +961,7 @@ def create_file_association():
 
 if __name__ == "__main__":
     # Check if we should create file associations
-    if len(sys.argv) > 1 and sys.argv[1] == '--register':
+    if len(sys.argv) > 1 and sys.argv[1] == "--register":
         create_file_association()
     else:
         main()
